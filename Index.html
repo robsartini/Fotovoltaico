@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Energy Monitor</title>
+    <script src="config.js"></script>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --card-bg: #1c1c1e;
+            --text-main: #ffffff;
+            --text-muted: #8e8e93;
+            --prod-color: #34c759;
+            --cons-color: #ff3b30;
+            --neutral-card: #2c2c2e;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { font-size: 22px; margin: 20px 0; font-weight: 600; }
+
+        .dashboard {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 25px;
+            padding: 20px;
+            text-align: center;
+            transition: background-color 0.8s ease;
+        }
+
+        #balance-card {
+            padding: 40px 20px;
+            background-color: var(--neutral-card);
+        }
+
+        .title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
+        .value { font-size: 48px; font-weight: 800; margin: 10px 0; letter-spacing: -1px; }
+        .sub-value { font-size: 16px; font-weight: 500; opacity: 0.9; }
+
+        .row { display: flex; gap: 15px; width: 100%; }
+        .small-card { flex: 1; padding: 20px 10px; }
+        .small-card .value { font-size: 28px; }
+
+        .history {
+            width: 100%;
+            max-width: 400px;
+            margin-top: 30px;
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 5px 20px;
+            box-sizing: border-box;
+        }
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid #38383a;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .debug-mini { font-size: 9px; color: #444; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>Energy Monitor</h1>
+
+    <div class="dashboard">
+        <div class="card" id="balance-card">
+            <div class="title">Bilancio Attuale</div>
+            <div class="value" id="balance-val">0 W</div>
+            <div class="sub-value" id="balance-status">Caricamento...</div>
+        </div>
+
+        <div class="row">
+            <div class="card small-card">
+                <div class="title">Produzione</div>
+                <div class="value" id="prod-val" style="color: var(--prod-color)">0 W</div>
+            </div>
+            <div class="card small-card">
+                <div class="title">Consumo</div>
+                <div class="value" id="cons-val" style="color: var(--cons-color)">0 W</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="history">
+        <div class="history-item"><span>Produzione Oggi</span><span id="hist-today" style="font-weight: bold;">-- kWh</span></div>
+        <div class="history-item"><span>Produzione Ieri</span><span id="hist-yesterday" style="font-weight: bold;">-- kWh</span></div>
+        <div class="history-item"><span>Totale Storico</span><span id="hist-total" style="font-weight: bold;">-- kWh</span></div>
+    </div>
+
+    <div id="debug-log" class="debug-mini"></div>
+
+    <script>
+        function updateUI(prod, cons, totalAll = null) {
+            const bilancio = prod - cons;
+            document.getElementById('prod-val').innerText = Math.round(prod) + " W";
+            document.getElementById('cons-val').innerText = Math.round(cons) + " W";
+            document.getElementById('balance-val').innerText = (bilancio > 0 ? "+" : "") + Math.round(bilancio) + " W";
+
+            const balanceCard = document.getElementById('balance-card');
+            const statusEl = document.getElementById('balance-status');
+            let ratio = Math.abs(bilancio) / SHELLY_CONFIG.MAX_POWER_REF;
+            let intensita = Math.min(Math.round(ratio * 100), 100);
+
+            if (bilancio < 0) {
+                balanceCard.style.backgroundColor = `color-mix(in srgb, #ff9500 ${intensita}%, #2c2c2e)`;
+                statusEl.innerText = "Stai prelevando energia";
+            } else {
+                balanceCard.style.backgroundColor = `color-mix(in srgb, #007aff ${intensita}%, #2c2c2e)`;
+                statusEl.innerText = "Stai vendendo energia ($)";
+            }
+
+            if(totalAll !== null) document.getElementById('hist-total').innerText = (totalAll / 1000).toFixed(1) + " kWh";
+        }
+
+ async function fetchHistory() {
+    try {
+        // Nuovo endpoint basato sulle statistiche degli emeters
+        const statsUrl = `${SHELLY_CONFIG.SERVER_URL}/statistics/emeters/query`;
+        
+        // Parametri per la richiesta: chiediamo i dati degli ultimi 2 giorni
+   
+   const auth = `&id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
+        
+        // Funzione per recuperare i dati di un giorno specifico
+        const getDailyTotal = async (range) => {
+            // Shelly richiede date precise o range predefiniti
+            const response = await fetch(`${statsUrl}?date_range=${range}${auth}&channel=0`);
+            const json = await response.json();
+            
+            if (json.isok && json.data && json.data.history) {
+                // Sommiamo tutti i record del giorno (Shelly manda i dati ora per ora)
+                const totalWh = json.data.history.reduce((acc, curr) => acc + (curr.total || 0), 0);
+                return (totalWh / 1000).toFixed(2) + " kWh";
+            }
+            return null;
+        };
+
+        const oggi = await getDailyTotal('today');
+        const ieri = await getDailyTotal('yesterday');
+
+        document.getElementById('hist-today').innerText = oggi || "0.00 kWh";
+        document.getElementById('hist-yesterday').innerText = ieri || "0.00 kWh";
+
+    } catch (e) {
+        console.error("Errore storico:", e);
+        document.getElementById('hist-today').innerText = "Errore Report";
+    }
+}       async function fetchShellyData() {
+            try {
+                const url = `${SHELLY_CONFIG.SERVER_URL}/device/status?id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
+                const response = await fetch(url);
+                const json = await response.json();
+                
+                if (json.isok) {
+                    const status = json.data.device_status;
+                    const p = status.emeters[0].power * -1;
+                    const c = status.emeters[1].power;
+                    const tAll = status.emeters[0].total;
+                    updateUI(p, c, tAll);
+                }
+            } catch (e) {
+                document.getElementById('balance-status').innerText = "Errore Connessione";
+            }
+        }
+
+        if (!SHELLY_CONFIG.USE_DEMO_MODE) {
+            fetchShellyData();
+            fetchHistory();
+            setInterval(fetchShellyData, 10000);
+            setInterval(fetchHistory, 300000); 
+        } else {
+            updateUI(1500, 800, 1200000);
+            document.getElementById('hist-today').innerText = "4.50 kWh";
+            document.getElementById('hist-yesterday').innerText = "12.30 kWh";
+        }
+    </script>
+</body>
+</html>
