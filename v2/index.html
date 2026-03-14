@@ -139,45 +139,36 @@
 
 async function fetchHistory() {
     try {
-        // L'URL corretto per le statistiche Cloud
         const statsUrl = `${SHELLY_CONFIG.SERVER_URL}/statistics/emeters/query`;
         const auth = `&id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
-
-        // Funzione interna per recuperare e sommare i dati
+        
         const getDailyTotal = async (range) => {
-            // Aggiungiamo il canale 0 (solitamente la produzione)
+            // Interroghiamo il Canale 0 (Produzione)
             const response = await fetch(`${statsUrl}?date_range=${range}${auth}&channel=0`);
             const json = await response.json();
             
-            console.log(`Dati ${range}:`, json); // Debug in console
-
             if (json.isok && json.data && json.data.history) {
-                // Shelly Cloud restituisce i dati storici in Wh (Watt-ora) per ogni slot temporale
-                // Sommiamo tutti i valori presenti nel range scelto
                 const totalWh = json.data.history.reduce((acc, curr) => {
-                    // Usiamo 'consumption' o 'total' a seconda della versione API, 
-                    // solitamente nelle statistiche è 'consumption'
-                    return acc + (curr.consumption || curr.total || 0);
+                    // Prova in ordine: consumption (standard), rev_consumption (produzione), o total
+                    const valore = curr.rev_consumption || curr.consumption || curr.total || 0;
+                    return acc + valore;
                 }, 0);
 
-                // Convertiamo in kWh e formattiamo
+                // Math.abs serve se i dati arrivano negativi dal sensore
                 return (Math.abs(totalWh) / 1000).toFixed(2) + " kWh";
             }
-            return null;
+            return "0.00 kWh";
         };
 
-        // Eseguiamo le chiamate per oggi e ieri
         const oggi = await getDailyTotal('today');
         const ieri = await getDailyTotal('yesterday');
 
-        // Aggiorniamo la UI con un fallback a 0.00 se il dato è nullo
-        document.getElementById('hist-today').innerText = oggi || "0.00 kWh";
-        document.getElementById('hist-yesterday').innerText = ieri || "0.00 kWh";
+        document.getElementById('hist-today').innerText = oggi;
+        document.getElementById('hist-yesterday').innerText = ieri;
 
     } catch (e) {
-        console.error("Errore nel recupero dello storico:", e);
+        console.error("Errore storico:", e);
         document.getElementById('hist-today').innerText = "Errore";
-        document.getElementById('hist-yesterday').innerText = "Errore";
     }
 }   
         
