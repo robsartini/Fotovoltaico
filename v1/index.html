@@ -111,7 +111,7 @@
 
     <script>
         function updateUI(prod, cons, totalAll = null) {
-            const bilancio = prod + cons;
+            const bilancio = prod - cons;
             document.getElementById('prod-val').innerText = Math.round(prod) + " W";
             document.getElementById('cons-val').innerText = Math.round(cons) + " W";
             document.getElementById('balance-val').innerText = (bilancio > 0 ? "+" : "") + Math.round(bilancio) + " W";
