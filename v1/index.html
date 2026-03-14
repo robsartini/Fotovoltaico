@@ -177,7 +177,7 @@
                 
                 if (json.isok) {
                     const status = json.data.device_status;
-                    const p = status.emeters[0].power;
+                    const p = status.emeters[0].power * -1;
                     const c = status.emeters[1].power;
                     const tAll = status.emeters[0].total;
                     updateUI(p, c, tAll);
