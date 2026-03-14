@@ -137,40 +137,49 @@
             if(totalAll !== null) document.getElementById('hist-total').innerText = (totalAll / 1000).toFixed(1) + " kWh";
         }
 
- async function fetchHistory() {
+async function fetchHistory() {
     try {
-        // Nuovo endpoint basato sulle statistiche degli emeters
+        // L'URL corretto per le statistiche Cloud
         const statsUrl = `${SHELLY_CONFIG.SERVER_URL}/statistics/emeters/query`;
-        
-        // Parametri per la richiesta: chiediamo i dati degli ultimi 2 giorni
-   
-   const auth = `&id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
-        
-        // Funzione per recuperare i dati di un giorno specifico
+        const auth = `&id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
+
+        // Funzione interna per recuperare e sommare i dati
         const getDailyTotal = async (range) => {
-            // Shelly richiede date precise o range predefiniti
+            // Aggiungiamo il canale 0 (solitamente la produzione)
             const response = await fetch(`${statsUrl}?date_range=${range}${auth}&channel=0`);
             const json = await response.json();
             
+            console.log(`Dati ${range}:`, json); // Debug in console
+
             if (json.isok && json.data && json.data.history) {
-                // Sommiamo tutti i record del giorno (Shelly manda i dati ora per ora)
-                const totalWh = json.data.history.reduce((acc, curr) => acc + (curr.total || 0), 0);
-                return (totalWh / 1000).toFixed(2) + " kWh";
+                // Shelly Cloud restituisce i dati storici in Wh (Watt-ora) per ogni slot temporale
+                // Sommiamo tutti i valori presenti nel range scelto
+                const totalWh = json.data.history.reduce((acc, curr) => {
+                    // Usiamo 'consumption' o 'total' a seconda della versione API, 
+                    // solitamente nelle statistiche è 'consumption'
+                    return acc + (curr.consumption || curr.total || 0);
+                }, 0);
+
+                // Convertiamo in kWh e formattiamo
+                return (Math.abs(totalWh) / 1000).toFixed(2) + " kWh";
             }
             return null;
         };
 
+        // Eseguiamo le chiamate per oggi e ieri
         const oggi = await getDailyTotal('today');
         const ieri = await getDailyTotal('yesterday');
 
+        // Aggiorniamo la UI con un fallback a 0.00 se il dato è nullo
         document.getElementById('hist-today').innerText = oggi || "0.00 kWh";
         document.getElementById('hist-yesterday').innerText = ieri || "0.00 kWh";
 
     } catch (e) {
-        console.error("Errore storico:", e);
-        document.getElementById('hist-today').innerText = "Errore Report";
+        console.error("Errore nel recupero dello storico:", e);
+        document.getElementById('hist-today').innerText = "Errore";
+        document.getElementById('hist-yesterday').innerText = "Errore";
     }
-}       
+}   
         
         async function fetchShellyData() {
             try {
