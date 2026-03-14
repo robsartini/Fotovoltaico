@@ -143,18 +143,22 @@ async function fetchHistory() {
         const auth = `&id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
         
         const getDailyTotal = async (range) => {
-            // Interroghiamo il Canale 0 (Produzione)
-            const response = await fetch(`${statsUrl}?date_range=${range}${auth}&channel=0`);
+            const url = `${statsUrl}?date_range=${range}${auth}&channel=0`;
+            const response = await fetch(url);
             const json = await response.json();
             
+            // LOG FONDAMENTALE: Apri la console del browser (F12) per vedere cosa c'è qui
+            console.log(`Risposta Shelly per ${range}:`, json);
+
             if (json.isok && json.data && json.data.history) {
                 const totalWh = json.data.history.reduce((acc, curr) => {
-                    // Prova in ordine: consumption (standard), rev_consumption (produzione), o total
-                    const valore = curr.rev_consumption || curr.consumption || curr.total || 0;
-                    return acc + valore;
+                    // Estraiamo tutti i possibili valori numerici dal record attuale
+                    // In molti casi Shelly usa 'rev_consumption' per il fotovoltaico
+                    const v = curr.rev_consumption || curr.consumption || curr.total || 0;
+                    return acc + v;
                 }, 0);
 
-                // Math.abs serve se i dati arrivano negativi dal sensore
+                console.log(`Totale calcolato per ${range}:`, totalWh);
                 return (Math.abs(totalWh) / 1000).toFixed(2) + " kWh";
             }
             return "0.00 kWh";
@@ -167,10 +171,9 @@ async function fetchHistory() {
         document.getElementById('hist-yesterday').innerText = ieri;
 
     } catch (e) {
-        console.error("Errore storico:", e);
-        document.getElementById('hist-today').innerText = "Errore";
+        console.error("Errore critico storico:", e);
     }
-}   
+}
         
         async function fetchShellyData() {
             try {
