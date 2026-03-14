@@ -169,7 +169,9 @@
         console.error("Errore storico:", e);
         document.getElementById('hist-today').innerText = "Errore Report";
     }
-}       async function fetchShellyData() {
+}       
+        
+        async function fetchShellyData() {
             try {
                 const url = `${SHELLY_CONFIG.SERVER_URL}/device/status?id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
                 const response = await fetch(url);
