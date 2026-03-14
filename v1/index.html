@@ -111,6 +111,10 @@
 
     <script>
         function updateUI(prod, cons, totalAll = null) {
+
+            prod = Math.abs(prod);
+            cons = Math.abs(cons);
+            
             const bilancio = prod - cons;
             document.getElementById('prod-val').innerText = Math.round(prod) + " W";
             document.getElementById('cons-val').innerText = Math.round(cons) + " W";
@@ -118,7 +122,7 @@
 
             const balanceCard = document.getElementById('balance-card');
             const statusEl = document.getElementById('balance-status');
-            let ratio = Math.abs(bilancio) / SHELLY_CONFIG.MAX_POWER_REF;
+            let ratio = bilancio / SHELLY_CONFIG.MAX_POWER_REF;
             let intensita = Math.min(Math.round(ratio * 100), 100);
 
             if (bilancio < 0) {
@@ -126,7 +130,7 @@
                 statusEl.innerText = "Stai prelevando energia";
             } else {
                 balanceCard.style.backgroundColor = `color-mix(in srgb, #007aff ${intensita}%, #2c2c2e)`;
-                statusEl.innerText = "Stai vendendo energia ($)";
+                statusEl.innerText = "Stai vendendo energia (€)";
             }
 
             if(totalAll !== null) document.getElementById('hist-total').innerText = (totalAll / 1000).toFixed(1) + " kWh";
@@ -173,7 +177,7 @@
                 
                 if (json.isok) {
                     const status = json.data.device_status;
-                    const p = status.emeters[0].power * -1;
+                    const p = status.emeters[0].power;
                     const c = status.emeters[1].power;
                     const tAll = status.emeters[0].total;
                     updateUI(p, c, tAll);
