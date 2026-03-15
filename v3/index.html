@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Energy Monitor v4.1 - Database Sync</title>
+    <title>Energy Monitor v4.2</title>
     <script src="config.js"></script>
     <style>
         :root {
@@ -17,7 +17,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-main);
             margin: 0;
@@ -27,63 +27,27 @@
             align-items: center;
         }
 
-        .dashboard {
-            width: 100%;
-            max-width: 400px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .card {
-            background-color: var(--card-bg);
-            border-radius: 25px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-
-        #balance-card {
-            padding: 40px 20px;
-            background: #2c2c2e;
-            transition: all 0.5s ease;
-        }
-
+        .dashboard { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 15px; }
+        .card { background-color: var(--card-bg); border-radius: 25px; padding: 20px; text-align: center; }
+        #balance-card { padding: 40px 20px; background: #2c2c2e; transition: all 0.5s ease; }
         .title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
-        .value { font-size: 48px; font-weight: 800; margin: 10px 0; letter-spacing: -1px; }
-        .sub-value { font-size: 16px; font-weight: 500; opacity: 0.9; }
-
+        .value { font-size: 48px; font-weight: 800; margin: 10px 0; }
         .row { display: flex; gap: 15px; width: 100%; }
         .small-card { flex: 1; padding: 20px 10px; }
         .small-card .value { font-size: 26px; }
 
         .history {
-            width: 100%;
-            max-width: 400px;
-            margin-top: 25px;
-            background: var(--card-bg);
-            border-radius: 20px;
-            padding: 5px 20px;
-            box-sizing: border-box;
+            width: 100%; max-width: 400px; margin-top: 25px;
+            background: var(--card-bg); border-radius: 20px; padding: 5px 20px; box-sizing: border-box;
         }
 
         .history-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 15px 0;
+            display: flex; justify-content: space-between; padding: 15px 0;
             border-bottom: 1px solid #38383a;
         }
-
         .history-item:last-child { border-bottom: none; }
         .history-item span:last-child { font-weight: 700; color: var(--accent-blue); }
-        
-        .sync-status {
-            font-size: 9px;
-            color: #444;
-            margin-top: 15px;
-            text-align: center;
-            text-transform: uppercase;
-        }
+        .sync-status { font-size: 9px; color: #444; margin-top: 15px; text-align: center; }
     </style>
 </head>
 <body>
@@ -92,7 +56,7 @@
         <div class="card" id="balance-card">
             <div class="title">Bilancio Attuale</div>
             <div class="value" id="balance-val">0 W</div>
-            <div class="sub-value" id="balance-status">Inizializzazione...</div>
+            <div id="balance-status" style="font-weight: 500; opacity: 0.9;">Inizializzazione...</div>
         </div>
 
         <div class="row">
@@ -112,10 +76,10 @@
         <div class="history-item"><span>Produzione Ieri</span><span id="hist-yesterday">-- kWh</span></div>
         <div class="history-item"><span>Questa Settimana</span><span id="hist-week">-- kWh</span></div>
         <div class="history-item"><span>Questo Mese</span><span id="hist-month">-- kWh</span></div>
-        <div class="history-item"><span>Totale Storico</span><span id="hist-total" style="color: var(--text-main) !important">-- kWh</span></div>
+        <div class="history-item"><span>Totale Storico</span><span id="hist-total" style="color:#fff!important">-- kWh</span></div>
     </div>
 
-    <div id="sync-info" class="sync-status">Database: In attesa dati...</div>
+    <div id="sync-info" class="sync-status">Database: Pronto</div>
 
     <script>
         let isSyncing = false;
@@ -124,27 +88,23 @@
             if (isSyncing) return;
             isSyncing = true;
             
-            // --- URL DI GOOGLE SCRIPT ---
-            const googleUrl = "https://script.google.com/macros/s/AKfycbwzm2uH3P8wNAgyyTLKBoJSYM26YI--z-w6bNHaioPk5QWAE1h5W6S5TfXprfEyoBEtbA/exec"; 
+            // LEGGE L'URL DAL FILE CONFIG.JS
+            const googleUrl = SHELLY_CONFIG.GOOGLE_SCRIPT_URL; 
             
-            const syncInfo = document.getElementById('sync-info');
-            syncInfo.innerText = "Database: Sincronizzazione in corso...";
+            if (!googleUrl || googleUrl.includes("INCOLLA")) {
+                document.getElementById('sync-info').innerText = "Configurazione URL mancante in config.js";
+                return;
+            }
 
             try {
                 const response = await fetch(`${googleUrl}?totale=${totaleWh}&key=${SHELLY_CONFIG.AUTH_KEY}`);
                 const data = await response.json();
-
                 const toKwh = (val) => (val / 1000).toFixed(2) + " kWh";
 
-                // Calcolo Produzione Oggi
                 if (data.puntoInizioOggi > 0) {
                     document.getElementById('hist-today').innerText = toKwh(totaleWh - data.puntoInizioOggi);
                 }
-
-                // Produzione Ieri (già calcolata dallo script)
                 document.getElementById('hist-yesterday').innerText = toKwh(data.produzioneIeri);
-
-                // Settimana e Mese
                 if (data.puntoInizioSettimana > 0) {
                     document.getElementById('hist-week').innerText = toKwh(totaleWh - data.puntoInizioSettimana);
                 }
@@ -152,40 +112,33 @@
                     document.getElementById('hist-month').innerText = toKwh(totaleWh - data.puntoInizioMese);
                 }
                 
-                syncInfo.innerText = "Database: Sincronizzato alle " + new Date().toLocaleTimeString();
+                document.getElementById('sync-info').innerText = "Ultimo Sync: " + new Date().toLocaleTimeString();
             } catch (e) {
-                syncInfo.innerText = "Database: Errore o database vuoto";
-                console.error("Errore Sync:", e);
+                document.getElementById('sync-info').innerText = "Sincronizzazione in corso...";
             }
 
-            // Evita troppe chiamate: blocca la sincronizzazione per 1 minuto
             setTimeout(() => { isSyncing = false; }, 60000); 
         }
 
         function updateUI(prod, cons, totalAll) {
-            // Pulizia valori
-            prod = Math.abs(prod);
-            cons = Math.abs(cons);
+            prod = Math.abs(prod); cons = Math.abs(cons);
             const bilancio = prod - cons;
 
-            // Aggiornamento Watt
             document.getElementById('prod-val').innerText = Math.round(prod) + " W";
             document.getElementById('cons-val').innerText = Math.round(cons) + " W";
             document.getElementById('balance-val').innerText = (bilancio > 0 ? "+" : "") + Math.round(bilancio) + " W";
 
-            // Stato del Bilancio
             const statusEl = document.getElementById('balance-status');
-            const balanceCard = document.getElementById('balance-card');
+            const card = document.getElementById('balance-card');
             
             if (bilancio < 0) {
-                balanceCard.style.backgroundColor = "#3a1c1c"; // Rosso molto scuro
+                card.style.backgroundColor = "#3a1c1c";
                 statusEl.innerText = "Stai prelevando energia";
             } else {
-                balanceCard.style.backgroundColor = "#1c3a25"; // Verde molto scuro
+                card.style.backgroundColor = "#1c3a25";
                 statusEl.innerText = "Stai vendendo energia";
             }
 
-            // Gestione Totale e Sincronizzazione
             if (totalAll) {
                 document.getElementById('hist-total').innerText = (totalAll / 1000).toFixed(1) + " kWh";
                 sincronizzaCloud(totalAll);
@@ -197,25 +150,15 @@
                 const url = `${SHELLY_CONFIG.SERVER_URL}/device/status?id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
                 const response = await fetch(url);
                 const json = await response.json();
-                
                 if (json.isok) {
-                    const status = json.data.device_status;
-                    // pinza 0 produzione, pinza 1 consumo
-                    updateUI(status.emeters[0].power, status.emeters[1].power, status.emeters[0].total);
+                    const s = json.data.device_status;
+                    updateUI(s.emeters[0].power, s.emeters[1].power, s.emeters[0].total);
                 }
-            } catch (e) {
-                document.getElementById('balance-status').innerText = "Errore Shelly Cloud";
-            }
+            } catch (e) { console.error("Errore Shelly"); }
         }
 
-        // Avvio monitoraggio
-        if (!SHELLY_CONFIG.USE_DEMO_MODE) {
-            fetchShellyData();
-            setInterval(fetchShellyData, 10000); // Aggiorna ogni 10 secondi
-        } else {
-            // Dati demo se attivata la modalità demo
-            updateUI(2000, 500, 1500000);
-        }
+        fetchShellyData();
+        setInterval(fetchShellyData, 10000);
     </script>
 </body>
 </html>
