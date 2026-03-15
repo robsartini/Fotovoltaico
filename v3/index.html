@@ -69,16 +69,27 @@
             }
         }
 
-        function updateUI(prod, cons, totalAll) {
+function updateUI(prod, cons, totalAll) {
             prod = Math.abs(prod); cons = Math.abs(cons);
             const bilancio = prod - cons;
             document.getElementById('prod-val').innerText = Math.round(prod) + " W";
             document.getElementById('cons-val').innerText = Math.round(cons) + " W";
             document.getElementById('balance-val').innerText = (bilancio > 0 ? "+" : "") + Math.round(bilancio) + " W";
             
+            const statusEl = document.getElementById('balance-status');
+            const balanceCard = document.getElementById('balance-card');
+            
+            if (bilancio < 0) {
+                balanceCard.style.backgroundColor = "#2c2c2e"; // Colore neutro o rosso scuro
+                statusEl.innerText = "Stai prelevando energia";
+            } else {
+                balanceCard.style.backgroundColor = "#1c1c1e"; // Colore base o verde scuro
+                statusEl.innerText = "Stai vendendo energia";
+            }
+            // ---------------------------------------
+
             if (totalAll) {
                 document.getElementById('hist-total').innerText = (totalAll / 1000).toFixed(1) + " kWh";
-                // Avvia la sincronizzazione cloud
                 sincronizzaGoogle(totalAll);
             }
         }
