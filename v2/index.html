@@ -110,99 +110,118 @@
 
     <div id="debug-log" class="debug-mini"></div>
 
-    <script>
-        function updateUI(prod, cons, totalAll = null) {
+<script>
+    // Configurazione locale per il "Piano B" (Calcolo manuale se l'API fallisce)
+    let dailyStartTotal = localStorage.getItem('daily_start_total') || null;
+    let lastResetDate = localStorage.getItem('last_reset_date') || "";
 
-            prod = Math.abs(prod);
-            cons = Math.abs(cons);
-            
-            const bilancio = prod - cons;
-            document.getElementById('prod-val').innerText = Math.round(prod) + " W";
-            document.getElementById('cons-val').innerText = Math.round(cons) + " W";
-            document.getElementById('balance-val').innerText = (bilancio > 0 ? "+" : "") + Math.round(bilancio) + " W";
+    function updateUI(prod, cons, totalAll = null) {
+        prod = Math.abs(prod);
+        cons = Math.abs(cons);
+        
+        const bilancio = prod - cons;
+        document.getElementById('prod-val').innerText = Math.round(prod) + " W";
+        document.getElementById('cons-val').innerText = Math.round(cons) + " W";
+        document.getElementById('balance-val').innerText = (bilancio > 0 ? "+" : "") + Math.round(bilancio) + " W";
 
-            const balanceCard = document.getElementById('balance-card');
-            const statusEl = document.getElementById('balance-status');
-            let ratio = bilancio / SHELLY_CONFIG.MAX_POWER_REF;
-            let intensita = Math.min(Math.round(ratio * 100), 100);
+        const balanceCard = document.getElementById('balance-card');
+        const statusEl = document.getElementById('balance-status');
+        let ratio = Math.abs(bilancio) / SHELLY_CONFIG.MAX_POWER_REF;
+        let intensita = Math.min(Math.round(ratio * 100), 100);
 
-            if (bilancio < 0) {
-                balanceCard.style.backgroundColor = `color-mix(in srgb, #ff9500 ${intensita}%, #2c2c2e)`;
-                statusEl.innerText = "Stai prelevando energia";
-            } else {
-                balanceCard.style.backgroundColor = `color-mix(in srgb, #007aff ${intensita}%, #2c2c2e)`;
-                statusEl.innerText = "Stai vendendo energia (€)";
-            }
-
-            if(totalAll !== null) document.getElementById('hist-total').innerText = (totalAll / 1000).toFixed(1) + " kWh";
+        if (bilancio < 0) {
+            balanceCard.style.backgroundColor = `color-mix(in srgb, #ff9500 ${intensita}%, #2c2c2e)`;
+            statusEl.innerText = "Stai prelevando energia";
+        } else {
+            balanceCard.style.backgroundColor = `color-mix(in srgb, #007aff ${intensita}%, #2c2c2e)`;
+            statusEl.innerText = "Stai vendendo energia (€)";
         }
 
-async function fetchHistory() {
-    try {
-        const statsUrl = `${SHELLY_CONFIG.SERVER_URL}/statistics/emeters/query`;
-        const auth = `&id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
-        
-        const getDailyTotal = async (range) => {
-            const url = `${statsUrl}?date_range=${range}${auth}&channel=0`;
-            const response = await fetch(url);
-            const json = await response.json();
+        if(totalAll !== null) {
+            const totalKwh = (totalAll / 1000).toFixed(1);
+            document.getElementById('hist-total').innerText = totalKwh + " kWh";
             
-            // LOG FONDAMENTALE: Apri la console del browser (F12) per vedere cosa c'è qui
-            console.log(`Risposta Shelly per ${range}:`, json);
-
-            if (json.isok && json.data && json.data.history) {
-                const totalWh = json.data.history.reduce((acc, curr) => {
-                    // Estraiamo tutti i possibili valori numerici dal record attuale
-                    // In molti casi Shelly usa 'rev_consumption' per il fotovoltaico
-                    const v = curr.rev_consumption || curr.consumption || curr.total || 0;
-                    return acc + v;
-                }, 0);
-
-                console.log(`Totale calcolato per ${range}:`, totalWh);
-                return (Math.abs(totalWh) / 1000).toFixed(2) + " kWh";
-            }
-            return "0.00 kWh";
-        };
-
-        const oggi = await getDailyTotal('today');
-        const ieri = await getDailyTotal('yesterday');
-
-        document.getElementById('hist-today').innerText = oggi;
-        document.getElementById('hist-yesterday').innerText = ieri;
-
-    } catch (e) {
-        console.error("Errore critico storico:", e);
+            // PIANO B: Calcolo produzione odierna basata sul totale storico
+            handleDailyProductionBackup(totalAll);
+        }
     }
-}
+
+    function handleDailyProductionBackup(currentTotal) {
+        const todayStr = new Date().toDateString();
+        // Se è un nuovo giorno, resetta il totale di partenza
+        if (lastResetDate !== todayStr) {
+            localStorage.setItem('daily_start_total', currentTotal);
+            localStorage.setItem('last_reset_date', todayStr);
+            dailyStartTotal = currentTotal;
+            lastResetDate = todayStr;
+        }
         
-        async function fetchShellyData() {
-            try {
-                const url = `${SHELLY_CONFIG.SERVER_URL}/device/status?id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
+        if (dailyStartTotal && document.getElementById('hist-today').innerText === "0.00 kWh") {
+            const oggiCalcolato = (currentTotal - dailyStartTotal) / 1000;
+            if (oggiCalcolato > 0) {
+                document.getElementById('hist-today').innerText = oggiCalcolato.toFixed(2) + " kWh*";
+            }
+        }
+    }
+
+    async function fetchHistory() {
+        try {
+            const statsUrl = `${SHELLY_CONFIG.SERVER_URL}/statistics/emeters/query`;
+            const auth = `&id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
+            
+            const getDailyTotal = async (range) => {
+                // Aggiunta granularity=day per forzare Shelly a rispondere
+                const url = `${statsUrl}?date_range=${range}${auth}&channel=0&granularity=day`;
                 const response = await fetch(url);
                 const json = await response.json();
                 
-                if (json.isok) {
-                    const status = json.data.device_status;
-                    const p = status.emeters[0].power * -1;
-                    const c = status.emeters[1].power;
-                    const tAll = status.emeters[0].total;
-                    updateUI(p, c, tAll);
+                if (json.isok && json.data && json.data.history && json.data.history.length > 0) {
+                    const data = json.data.history[0];
+                    // Shelly EM può usare nomi diversi a seconda della versione firmware
+                    const val = data.rev_consumption || data.energy || data.consumption || 0;
+                    return (Math.abs(val) / 1000).toFixed(2) + " kWh";
                 }
-            } catch (e) {
-                document.getElementById('balance-status').innerText = "Errore Connessione";
-            }
-        }
+                return "0.00 kWh";
+            };
 
-        if (!SHELLY_CONFIG.USE_DEMO_MODE) {
-            fetchShellyData();
-            fetchHistory();
-            setInterval(fetchShellyData, 10000);
-            setInterval(fetchHistory, 300000); 
-        } else {
-            updateUI(1500, 800, 1200000);
-            document.getElementById('hist-today').innerText = "4.50 kWh";
-            document.getElementById('hist-yesterday').innerText = "12.30 kWh";
+            const oggi = await getDailyTotal('today');
+            const ieri = await getDailyTotal('yesterday');
+
+            document.getElementById('hist-today').innerText = oggi;
+            document.getElementById('hist-yesterday').innerText = ieri;
+
+        } catch (e) {
+            console.error("Errore storico:", e);
         }
-    </script>
+    }
+    
+    async function fetchShellyData() {
+        try {
+            const url = `${SHELLY_CONFIG.SERVER_URL}/device/status?id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
+            const response = await fetch(url);
+            const json = await response.json();
+            
+            if (json.isok) {
+                const status = json.data.device_status;
+                const p = status.emeters[0].power; 
+                const c = status.emeters[1].power;
+                const tAll = status.emeters[0].total;
+                updateUI(p, c, tAll);
+            }
+        } catch (e) {
+            document.getElementById('balance-status').innerText = "Errore Connessione";
+        }
+    }
+
+    if (!SHELLY_CONFIG.USE_DEMO_MODE) {
+        fetchShellyData();
+        fetchHistory();
+        setInterval(fetchShellyData, 10000);
+        setInterval(fetchHistory, 300000); 
+    } else {
+        updateUI(1500, 800, 1200000);
+    }
+</script>
+    
 </body>
 </html>
