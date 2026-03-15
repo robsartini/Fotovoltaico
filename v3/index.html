@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Energy Monitor v2</title>
+    <title>Monitor Fotovoltaico</title>
     <script src="config.js"></script>
     <style>
         :root {
@@ -114,3 +114,116 @@
 
     <script>
         // --- LOGICA DI MEMORIA (PIANO B) ---
+        function handleHistoricalData(currentTotal) {
+            const now = new Date();
+            const todayStr = now.toDateString();
+            
+            // Calcolo Lunedì della settimana corrente
+            const day = now.getDay();
+            const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+            const mondayStr = new Date(now.setDate(diff)).toDateString();
+            
+            // Primo del mese
+            const monthStr = new Date(now.getFullYear(), now.getMonth(), 1).toDateString();
+
+            // Reset Giornaliero & Salvataggio Ieri
+            if (localStorage.getItem('last_reset_day') !== todayStr) {
+                const lastToday = document.getElementById('hist-today').innerText;
+                if(lastToday !== "-- kWh") localStorage.setItem('yesterday_val', lastToday);
+                
+                localStorage.setItem('start_total_day', currentTotal);
+                localStorage.setItem('last_reset_day', todayStr);
+            }
+
+            // Reset Settimanale
+            if (localStorage.getItem('last_reset_week') !== mondayStr) {
+                localStorage.setItem('start_total_week', currentTotal);
+                localStorage.setItem('last_reset_week', mondayStr);
+            }
+
+            // Reset Mensile
+            if (localStorage.getItem('last_reset_month') !== monthStr) {
+                localStorage.setItem('start_total_month', currentTotal);
+                localStorage.setItem('last_reset_month', monthStr);
+            }
+
+            // Calcolo differenze
+            const calc = (key, elementId) => {
+                const start = localStorage.getItem(key);
+                if (start) {
+                    const diffKwh = (currentTotal - start) / 1000;
+                    document.getElementById(elementId).innerText = Math.max(0, diffKwh).toFixed(2) + " kWh";
+                }
+            };
+
+            calc('start_total_day', 'hist-today');
+            calc('start_total_week', 'hist-week');
+            calc('start_total_month', 'hist-month');
+            
+            const ieri = localStorage.getItem('yesterday_val');
+            if (ieri) document.getElementById('hist-yesterday').innerText = ieri;
+        }
+
+        // --- LOGICA UI ---
+        function updateUI(prod, cons, totalAll) {
+            // Forziamo i valori positivi (Math.abs)
+            prod = Math.abs(prod);
+            cons = Math.abs(cons);
+            
+            const bilancio = prod - cons;
+            document.getElementById('prod-val').innerText = Math.round(prod) + " W";
+            document.getElementById('cons-val').innerText = Math.round(cons) + " W";
+            document.getElementById('balance-val').innerText = (bilancio > 0 ? "+" : "") + Math.round(bilancio) + " W";
+
+            const balanceCard = document.getElementById('balance-card');
+            const statusEl = document.getElementById('balance-status');
+            
+            // Intensità colore dinamica
+            let ratio = Math.abs(bilancio) / SHELLY_CONFIG.MAX_POWER_REF;
+            let intensita = Math.min(Math.round(ratio * 100), 100);
+
+            if (bilancio < 0) {
+                balanceCard.style.backgroundColor = `color-mix(in srgb, #ff3b30 ${intensita}%, #2c2c2e)`;
+                statusEl.innerText = "Stai prelevando energia";
+            } else {
+                balanceCard.style.backgroundColor = `color-mix(in srgb, #34c759 ${intensita}%, #2c2c2e)`;
+                statusEl.innerText = "Stai producendo eccedenza";
+            }
+
+            // Totale Storico e gestione memoria
+            if (totalAll) {
+                document.getElementById('hist-total').innerText = (totalAll / 1000).toFixed(1) + " kWh";
+                handleHistoricalData(totalAll);
+            }
+        }
+
+        // --- FETCH DATI ---
+        async function fetchShellyData() {
+            try {
+                const url = `${SHELLY_CONFIG.SERVER_URL}/device/status?id=${SHELLY_CONFIG.DEVICE_ID}&auth_key=${SHELLY_CONFIG.AUTH_KEY}`;
+                const response = await fetch(url);
+                const json = await response.json();
+                
+                if (json.isok) {
+                    const status = json.data.device_status;
+                    // Pinza 0 = Produzione, Pinza 1 = Consumo
+                    const p = status.emeters[0].power; 
+                    const c = status.emeters[1].power;
+                    const tAll = status.emeters[0].total;
+                    updateUI(p, c, tAll);
+                }
+            } catch (e) {
+                document.getElementById('balance-status').innerText = "Errore di rete";
+            }
+        }
+
+        // Avvio
+        if (!SHELLY_CONFIG.USE_DEMO_MODE) {
+            fetchShellyData();
+            setInterval(fetchShellyData, 10000); // Aggiorna ogni 10 secondi
+        } else {
+            updateUI(2500, 1200, 4500000);
+        }
+    </script>
+</body>
+</html>
