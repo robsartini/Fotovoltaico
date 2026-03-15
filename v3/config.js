@@ -6,6 +6,6 @@ const SHELLY_CONFIG = {
     AUTH_KEY: "MWVmNTNmdWlk1D2ED53C10E5B83DEBC778C9166C665959FCD9011942DCE39E3D0E751BC18B9D11E61E7A595BE697",
     DEVICE_ID: "bcff4dfd05f7",
     MAX_POWER_REF: 3000, // Watt per il colore pieno
-    USE_DEMO_MODE: false // Metti true per testare la grafica se lo Shelly è offline
+    USE_DEMO_MODE: false, // Metti true per testare la grafica se lo Shelly è offline
     GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxa1EeSEgtQoAMkTegpXPDrMKeyxFfXEFeLwozoZ6MpKyDu56_0QoOM1-kSupHLtjri9A/exec"
 };
