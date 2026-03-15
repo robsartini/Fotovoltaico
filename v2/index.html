@@ -164,8 +164,8 @@ async function fetchHistory() {
             return "0.00 kWh";
         };
 
-        const oggi = await getDailyTotal('2026-03-15');
-        const ieri = await getDailyTotal('2026-03-14');
+        const oggi = await getDailyTotal('today');
+        const ieri = await getDailyTotal('yesterday');
 
         document.getElementById('hist-today').innerText = oggi;
         document.getElementById('hist-yesterday').innerText = ieri;
