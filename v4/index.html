@@ -1,1 +1,149 @@
 
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Energy Monitor v5.0</title>
+    <script src="config.js"></script>
+    <style>
+        :root {
+            --bg-color: #000;
+            --card-bg: #1c1c1e;
+            --text-main: #fff;
+            --text-muted: #8e8e93;
+            --prod-color: #34c759;
+            --cons-color: #ff3b30;
+            --accent-blue: #007aff;
+        }
+
+        body {
+            font-family: -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .dashboard { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 15px; }
+        .card { background-color: var(--card-bg); border-radius: 25px; padding: 20px; text-align: center; }
+        #balance-card { padding: 40px 20px; background: #2c2c2e; transition: all 0.5s ease; }
+        .title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
+        .value { font-size: 48px; font-weight: 800; margin: 10px 0; }
+        .row { display: flex; gap: 15px; width: 100%; }
+        .small-card { flex: 1; padding: 20px 10px; }
+        .small-card .value { font-size: 26px; }
+
+        .history {
+            width: 100%; max-width: 400px; margin-top: 25px;
+            background: var(--card-bg); border-radius: 20px; padding: 5px 20px; box-sizing: border-box;
+        }
+
+        .history-item {
+            display: flex; justify-content: space-between; padding: 15px 0;
+            border-bottom: 1px solid #38383a;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .history-item span:last-child { font-weight: 700; color: var(--accent-blue); }
+        .sync-status { font-size: 9px; color: #444; margin-top: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <div class="card" id="balance-card">
+            <div class="title">Bilancio Attuale</div>
+            <div class="value" id="balance-val">0 W</div>
+            <div id="balance-status" style="font-weight: 500; opacity: 0.9;">Connessione...</div>
+        </div>
+
+        <div class="row">
+            <div class="card small-card">
+                <div class="title">Produzione</div>
+                <div class="value" id="prod-val" style="color: var(--prod-color)">0 W</div>
+            </div>
+            <div class="card small-card">
+                <div class="title">Consumo</div>
+                <div class="value" id="cons-val" style="color: var(--cons-color)">0 W</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="history">
+        <div class="history-item"><span>Produzione Oggi</span><span id="hist-today">-- kWh</span></div>
+        <div class="history-item"><span>Produzione Ieri</span><span id="hist-yesterday">-- kWh</span></div>
+        <div class="history-item"><span>Questa Settimana</span><span id="hist-week">-- kWh</span></div>
+        <div class="history-item"><span>Questo Mese</span><span id="hist-month">-- kWh</span></div>
+        <div class="history-item"><span>Totale Storico</span><span id="hist-total" style="color:#fff!important">-- kWh</span></div>
+    </div>
+
+    <div id="sync-info" class="sync-status">Proxy Server: Inizializzazione...</div>
+
+    <script>
+        function updateUI(prod, cons, totalAll) {
+            const bilancio = prod - cons;
+
+            document.getElementById('prod-val').innerText = Math.round(prod) + " W";
+            document.getElementById('cons-val').innerText = Math.round(cons) + " W";
+            document.getElementById('balance-val').innerText = (bilancio > 0 ? "+" : "") + Math.round(bilancio) + " W";
+            document.getElementById('hist-total').innerText = (totalAll / 1000).toFixed(1) + " kWh";
+
+            const statusEl = document.getElementById('balance-status');
+            const card = document.getElementById('balance-card');
+            
+            if (bilancio < 0) {
+                card.style.backgroundColor = "#3a1c1c";
+                statusEl.innerText = "Stai prelevando energia";
+            } else {
+                card.style.backgroundColor = "#1c3a25";
+                statusEl.innerText = "Stai vendendo energia";
+            }
+        }
+
+        async function refreshAllData() {
+            const googleUrl = SHELLY_CONFIG.GOOGLE_SCRIPT_URL;
+            
+            if (!googleUrl || googleUrl.includes("INCOLLA")) {
+                document.getElementById('sync-info').innerText = "Errore: Configura l'URL in config.js";
+                return;
+            }
+
+            try {
+                // Chiamata singola al Proxy su Google Apps Script
+                const response = await fetch(googleUrl);
+                const data = await response.json();
+
+                if (data.error) {
+                    document.getElementById('sync-info').innerText = "Errore Shelly: " + data.error;
+                    return;
+                }
+
+                // 1. Aggiorna UI Istantanea
+                updateUI(data.istantanei.produzione, data.istantanei.consumo, data.istantanei.totaleStorico);
+
+                // 2. Aggiorna Storico (Calcoli fatti dal Server)
+                const currentTotal = data.istantanei.totaleStorico;
+                const s = data.storici;
+                const toKwh = (val) => (val / 1000).toFixed(2) + " kWh";
+
+                document.getElementById('hist-today').innerText = toKwh(currentTotal - s.puntoInizioOggi);
+                document.getElementById('hist-yesterday').innerText = toKwh(s.produzioneIeri);
+                document.getElementById('hist-week').innerText = toKwh(currentTotal - s.puntoInizioSettimana);
+                document.getElementById('hist-month').innerText = toKwh(currentTotal - s.puntoInizioMese);
+                
+                document.getElementById('sync-info').innerText = "Ultimo Update: " + data.istantanei.aggiornamento;
+
+            } catch (e) {
+                document.getElementById('sync-info').innerText = "Errore di connessione al Proxy Server";
+            }
+        }
+
+        // Avvio e Loop (ogni 15 secondi per non sovraccaricare i trigger di Google)
+        refreshAllData();
+        setInterval(refreshAllData, 15000);
+    </script>
+</body>
+</html>
