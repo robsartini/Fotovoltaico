@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Energy Monitor v5.0</title>
+    <title>Energy Monitor v5.1</title>
     <script src="config.js"></script>
     <style>
         :root {
@@ -55,8 +55,8 @@
     <div class="dashboard">
         <div class="card" id="balance-card">
             <div class="title" id="main-title">Bilancio Attuale</div>
-            <div class="value" id="balance-val">0 W</div>
-            <div id="balance-status" style="font-weight: 500; opacity: 0.9;">Inizializzazione...</div>
+            <div class="value" id="balance-val">-- W</div>
+            <div id="balance-status" style="font-weight: 500; opacity: 0.9;">Caricamento dati...</div>
         </div>
 
         <div class="row">
@@ -79,7 +79,7 @@
         <div class="history-item"><span>Totale Storico</span><span id="hist-total" style="color:#fff!important">-- kWh</span></div>
     </div>
 
-    <div id="sync-info" class="sync-status">Proxy Server: Connessione...</div>
+    <div id="sync-info" class="sync-status">Tira giù per aggiornare</div>
 
     <script>
         function updateUI(prod, cons, totalAll) {
@@ -105,28 +105,26 @@
         async function refreshAllData() {
             const googleUrl = SHELLY_CONFIG.GOOGLE_SCRIPT_URL;
             
-            if (!googleUrl || googleUrl.includes("INCOLLA")) {
+            if (!googleUrl) {
                 document.getElementById('sync-info').innerText = "Errore: Configura l'URL in config.js";
                 return;
             }
 
             try {
-                // Chiamata unica al Proxy su Google
+                document.getElementById('sync-info').innerText = "Sincronizzazione in corso...";
+                
                 const response = await fetch(googleUrl);
                 const data = await response.json();
 
                 if (data.error) {
-                    document.getElementById('sync-info').innerText = "Errore Shelly: " + data.error;
+                    document.getElementById('sync-info').innerText = "Errore: " + data.error;
                     return;
                 }
 
-                // 1. Configurazione dinamica dal server
                 if(data.config.titolo) document.getElementById('main-title').innerText = data.config.titolo;
 
-                // 2. Aggiorna UI Istantanea
                 updateUI(data.istantanei.produzione, data.istantanei.consumo, data.istantanei.totaleStorico);
 
-                // 3. Aggiorna Storico (Riceviamo già i kWh calcolati dal server!)
                 const s = data.storici;
                 const fmt = (val) => (val / 1000).toFixed(2) + " kWh";
 
@@ -135,17 +133,16 @@
                 document.getElementById('hist-week').innerText = fmt(s.settimana);
                 document.getElementById('hist-month').innerText = fmt(s.mese);
                 
-                document.getElementById('sync-info').innerText = "Aggiornato: " + data.istantanei.aggiornamento;
+                document.getElementById('sync-info').innerText = "Ultimo aggiornamento: " + data.istantanei.aggiornamento;
 
             } catch (e) {
-                document.getElementById('sync-info').innerText = "Errore di connessione al Proxy Server";
-                console.error("Fetch error:", e);
+                document.getElementById('sync-info').innerText = "Errore di connessione. Ricarica la pagina.";
+                console.error(e);
             }
         }
 
-        // Avvio immediato e loop ogni 15 secondi
-        refreshAllData();
-        setInterval(refreshAllData, 15000);
+        // Esegue l'aggiornamento solo UNA VOLTA all'apertura dell'app
+        window.onload = refreshAllData;
     </script>
 </body>
 </html>
