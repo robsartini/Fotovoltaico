@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -55,9 +54,9 @@
 
     <div class="dashboard">
         <div class="card" id="balance-card">
-            <div class="title">Bilancio Attuale</div>
+            <div class="title" id="main-title">Bilancio Attuale</div>
             <div class="value" id="balance-val">0 W</div>
-            <div id="balance-status" style="font-weight: 500; opacity: 0.9;">Connessione...</div>
+            <div id="balance-status" style="font-weight: 500; opacity: 0.9;">Inizializzazione...</div>
         </div>
 
         <div class="row">
@@ -80,7 +79,7 @@
         <div class="history-item"><span>Totale Storico</span><span id="hist-total" style="color:#fff!important">-- kWh</span></div>
     </div>
 
-    <div id="sync-info" class="sync-status">Proxy Server: Inizializzazione...</div>
+    <div id="sync-info" class="sync-status">Proxy Server: Connessione...</div>
 
     <script>
         function updateUI(prod, cons, totalAll) {
@@ -112,7 +111,7 @@
             }
 
             try {
-                // Chiamata singola al Proxy su Google Apps Script
+                // Chiamata unica al Proxy su Google
                 const response = await fetch(googleUrl);
                 const data = await response.json();
 
@@ -121,27 +120,30 @@
                     return;
                 }
 
-                // 1. Aggiorna UI Istantanea
+                // 1. Configurazione dinamica dal server
+                if(data.config.titolo) document.getElementById('main-title').innerText = data.config.titolo;
+
+                // 2. Aggiorna UI Istantanea
                 updateUI(data.istantanei.produzione, data.istantanei.consumo, data.istantanei.totaleStorico);
 
-                // 2. Aggiorna Storico (Calcoli fatti dal Server)
-                const currentTotal = data.istantanei.totaleStorico;
+                // 3. Aggiorna Storico (Riceviamo già i kWh calcolati dal server!)
                 const s = data.storici;
-                const toKwh = (val) => (val / 1000).toFixed(2) + " kWh";
+                const fmt = (val) => (val / 1000).toFixed(2) + " kWh";
 
-                document.getElementById('hist-today').innerText = toKwh(currentTotal - s.puntoInizioOggi);
-                document.getElementById('hist-yesterday').innerText = toKwh(s.produzioneIeri);
-                document.getElementById('hist-week').innerText = toKwh(currentTotal - s.puntoInizioSettimana);
-                document.getElementById('hist-month').innerText = toKwh(currentTotal - s.puntoInizioMese);
+                document.getElementById('hist-today').innerText = fmt(s.oggi);
+                document.getElementById('hist-yesterday').innerText = fmt(s.ieri);
+                document.getElementById('hist-week').innerText = fmt(s.settimana);
+                document.getElementById('hist-month').innerText = fmt(s.mese);
                 
-                document.getElementById('sync-info').innerText = "Ultimo Update: " + data.istantanei.aggiornamento;
+                document.getElementById('sync-info').innerText = "Aggiornato: " + data.istantanei.aggiornamento;
 
             } catch (e) {
                 document.getElementById('sync-info').innerText = "Errore di connessione al Proxy Server";
+                console.error("Fetch error:", e);
             }
         }
 
-        // Avvio e Loop (ogni 15 secondi per non sovraccaricare i trigger di Google)
+        // Avvio immediato e loop ogni 15 secondi
         refreshAllData();
         setInterval(refreshAllData, 15000);
     </script>
