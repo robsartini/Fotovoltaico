@@ -1,1 +1,104 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Energy Monitor v5.2</title>
+    <script src="config.js"></script>
+    <style>
+        :root {
+            --bg-color: #000;
+            --card-bg: #1c1c1e;
+            --text-main: #fff;
+            --text-muted: #8e8e93;
+            --prod-color: #34c759;
+            --accent-blue: #007aff;
+        }
 
+        body {
+            font-family: -apple-system, sans-serif;
+            background-color: var(--bg-color); color: var(--text-main);
+            margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
+        }
+
+        .dashboard { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 15px; }
+        .card { background-color: var(--card-bg); border-radius: 25px; padding: 30px 20px; text-align: center; }
+        .title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
+        .value { font-size: 42px; font-weight: 800; margin: 10px 0; color: var(--prod-color); }
+        
+        .history {
+            width: 100%; max-width: 400px; margin-top: 25px;
+            background: var(--card-bg); border-radius: 20px; padding: 5px 20px; box-sizing: border-box;
+        }
+
+        .history-item {
+            display: flex; justify-content: space-between; padding: 15px 0;
+            border-bottom: 1px solid #38383a;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .history-item span:last-child { font-weight: 700; color: var(--accent-blue); }
+        .sync-status { font-size: 10px; color: #444; margin-top: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <div class="card">
+            <div class="title">Produzione Totale</div>
+            <div class="value" id="main-total">-- kWh</div>
+            <div style="font-size: 13px; color: var(--text-muted);">Dato aggiornato dallo Shelly</div>
+        </div>
+    </div>
+
+    <div class="history">
+        <div class="history-item"><span>Oggi</span><span id="hist-today">-- kWh</span></div>
+        <div class="history-item"><span>Ieri</span><span id="hist-yesterday">-- kWh</span></div>
+        <div class="history-item"><span>Questa Settimana</span><span id="hist-week">-- kWh</span></div>
+        <div class="history-item"><span>Questo Mese</span><span id="hist-month">-- kWh</span></div>
+    </div>
+
+    <div id="sync-info" class="sync-status">Caricamento...</div>
+
+    <script>
+        async function loadData() {
+            // Prendiamo i dati da config.js
+            const url = SHELLY_CONFIG.GOOGLE_SCRIPT_URL;
+            const key = SHELLY_CONFIG.AUTH_KEY_SEGRETA;
+            
+            // Per leggere i dati, inviamo un "totale" fittizio o l'ultimo noto 
+            // In questa configurazione, l'app legge l'ultimo stato registrato sul foglio
+            const targetUrl = `${url}?key=${key}&totale=read`;
+
+            try {
+                document.getElementById('sync-info').innerText = "Sincronizzazione...";
+                
+                const response = await fetch(targetUrl);
+                const data = await response.json();
+
+                const toKwh = (val) => (val / 1000).toFixed(2) + " kWh";
+
+                // Calcoliamo i progressi basandoci sul punto più alto (l'ultimo nel foglio)
+                // Usiamo puntoInizioOggi come riferimento per il totale attuale salvato
+                const attuale = data.puntoInizioOggi; 
+
+                document.getElementById('main-total').innerText = (attuale / 1000).toFixed(1) + " kWh";
+                
+                // Produzione Oggi = Ultimo valore - valore a mezzanotte
+                // Nota: se lo Shelly non ha ancora inviato dati oggi, sarà 0
+                document.getElementById('hist-today').innerText = toKwh(attuale - data.puntoInizioOggi);
+                document.getElementById('hist-yesterday').innerText = toKwh(data.produzioneIeri);
+                document.getElementById('hist-week').innerText = toKwh(attuale - data.puntoInizioSettimana);
+                document.getElementById('hist-month').innerText = toKwh(attuale - data.puntoInizioMese);
+                
+                document.getElementById('sync-info').innerText = "Dati aggiornati all'ultimo invio dello Shelly";
+
+            } catch (e) {
+                document.getElementById('sync-info').innerText = "Errore di connessione.";
+                console.error(e);
+            }
+        }
+
+        window.onload = loadData;
+    </script>
+</body>
+</html>
